@@ -27,15 +27,13 @@ except (TypeError, ValueError):
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
-def make_main_menu(is_admin: bool, anon_mode: bool, ):
+def make_main_menu(anon_mode: bool, ):
     button_label_1 = "در حالت ناشناس هستی. خروج؟" if anon_mode else "ورود به حالت ناشناس"
     button_label_2 = "دستور ها و قابلیت ها"
     button_label_3 = "پاکسازی پیام ها"
     buttons = [[InlineKeyboardButton(button_label_1, callback_data="toggle_anon")],
                [InlineKeyboardButton(button_label_2, callback_data="help")],
                [InlineKeyboardButton(button_label_3, callback_data="cleanup")]]
-    if is_admin:
-        buttons.append([InlineKeyboardButton("Show Inbox", callback_data="show_inbox")])
     return InlineKeyboardMarkup(buttons)
 
 
@@ -56,9 +54,8 @@ async def manage_main_menu(
         text: str = "✨ خوش اومدی ✨",
         parse_mode=None
 ):
-    user_id = update.effective_user.id
     anon_mode = context.bot_data.get("anon_mode", False)
-    markup = make_main_menu(user_id == ADMIN_ID, anon_mode)
+    markup = make_main_menu(anon_mode)
     chat_id = update.effective_chat.id
     menu_id = context.bot_data.get("menu_msg_id")
 
@@ -125,17 +122,6 @@ async def on_toggle_anon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def on_show_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if not pending_inbox:
-        await query.edit_message_text("📭 Inbox is empty.", reply_markup=make_main_menu(True, False))
-        return
-    text_lines = [f"{idx}. Anon {msg['anon_id']}: {msg['text']}" for idx, msg in enumerate(pending_inbox[:10], 1)]
-    text = "📭 Pending messages:\n\n" + "\n".join(text_lines)
-    await query.edit_message_text(text, reply_markup=make_main_menu(True, False))
-
-
 async def on_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -166,7 +152,6 @@ async def on_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🕶️ <b>حالت ناشناس:</b> چت کردن به صورت ناشناس با {ADMIN_NAME}\n"
         "🗑️ <b>پاکسازی پیام‌ها:</b> حذف راحت پیام های اخیر در چت به جز پیام منو\n"
-        "🚫 <b>مسدودسازی:</b> امکان بلاک کاربر مزاحم (در دست توسعه)\n\n"
         "📣 <i>برای پیشنهادات یا گزارش باگ، به ادمین پیام دهید.</i>"
     )
     await manage_main_menu(update, context, text=help_text, parse_mode=ParseMode.HTML)
@@ -199,7 +184,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id == ADMIN_ID and "reply_to" in context.bot_data:
         anon_id = context.bot_data.pop("reply_to")
         target_user = decode(anon_id)
-        await context.bot.send_message(chat_id=target_user, text=f"💬 <b>Admin:</b> {msg.text}", parse_mode="HTML")
+        await context.bot.send_message(chat_id=target_user,
+                                       text=f"💬 <b>{ADMIN_NAME}</b>\n {msg.text}",
+                                       parse_mode="HTML"
+                                       )
         await update.message.reply_text("✅.")
         return
 
@@ -228,7 +216,6 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("id", show_id))
     app.add_handler(CallbackQueryHandler(on_toggle_anon, pattern="^toggle_anon$"))
-    app.add_handler(CallbackQueryHandler(on_show_inbox, pattern="^show_inbox$"))
     app.add_handler(CallbackQueryHandler(on_help, pattern="^help$"))
     app.add_handler(CallbackQueryHandler(on_cleanup, pattern="^cleanup$"))
     app.add_handler(CallbackQueryHandler(on_reply, pattern=r"^anonreply_[\dA-Za-z]+_\d+$"))
